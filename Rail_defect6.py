@@ -43,7 +43,8 @@ def calculate_dimensions(cropped_image, pixel_per_cm):
                 # Store the detected dark spot
                 dark_spots.append((x, y, w, h, dimensions))
 
-    return cropped_image, dark_spots
+    return dark_spots
+    #return cropped_image, dark_spots
 
 def mouse_callback(event, x, y, flags, param):
     global point1, point2, frame_start, frame_end, frame_resizing, image_mini
@@ -74,7 +75,7 @@ def mouse_callback(event, x, y, flags, param):
             point2 = frame_end
 
 def on_key(event):
-    global point1, point2, image_mini, frame_start, frame_end
+    global point1, point2, image_mini, frame_start, frame_end, dark_spots
 
     if event == ord('a') and frame_start and frame_end:
         frame_start = (min(frame_start[0], frame_end[0]), min(frame_start[1], frame_end[1]))
@@ -87,16 +88,45 @@ def on_key(event):
         cropped_image = image_mini[frame_start[1]:frame_end[1], frame_start[0]:frame_end[0]]
 
         pixel_per_cm = calculate_distance(point1, point2) / etalon_line
-        cropped_image_with_dimensions, dark_spots = calculate_dimensions(cropped_image, pixel_per_cm)
+                
+        dark_spots = calculate_dimensions(cropped_image, pixel_per_cm)
+        cropped_image_with_dimensions = cropped_image.copy()
+        for dark_spot in dark_spots:
+            (x, y, w, h, dimensions) = dark_spot  ##################
+            cv2.rectangle(cropped_image_with_dimensions, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+            # Add dimensions text to the dark spot
+            cv2.putText(cropped_image_with_dimensions, f"Square: {dimensions:.2f} cm^2", (x, y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(cropped_image_with_dimensions, f"Width: {w:.2f} cm", (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(cropped_image_with_dimensions, f"Height: {h:.2f} cm", (x, y - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
         cv2.imshow("Cropped Image", cropped_image_with_dimensions)
 
-        return dark_spots
+        #return dark_spots
 
 def on_trackbar(val):
-    global threshold_value
+    global threshold_value, image_mini, dark_spots
+    temp_image=None
     threshold_value = val
-    cv2.imshow("Image", image_mini)
+    if frame_start and frame_end:
+        point1 = frame_start
+        point2 = frame_end
+
+        pixel_per_cm = calculate_distance(point1, point2) / etalon_line
+        cropped_image = image_mini[frame_start[1]:frame_end[1], frame_start[0]:frame_end[0]]
+        dark_spots = calculate_dimensions(cropped_image, pixel_per_cm)
+
+        temp_image = image_mini.copy()
+        for dark_spot in dark_spots:
+            (x, y, w, h, dimensions) = dark_spot
+            cv2.rectangle(temp_image, (x + frame_start[0], y + frame_start[1]), (x + frame_start[0] + w, y + frame_start[1] + h), (0, 255, 0), 2)
+
+            # Add dimensions text to the dark spot
+            cv2.putText(temp_image, f"Square: {dimensions:.2f} cm^2", (x + frame_start[0], y + frame_start[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(temp_image, f"Width: {w:.2f} cm", (x + frame_start[0], y + frame_start[1] - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(temp_image, f"Height: {h:.2f} cm", (x + frame_start[0], y + frame_start[1] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    cv2.imshow("Image", temp_image)
     
 #*Рисуем интерфейс*
 layout = [
@@ -129,30 +159,30 @@ while True:
         dim = (width, height)
         image_mini = cv2.resize(image, dim, interpolation = cv2.INTER_AREA)
         #
-        
-        cv2.imshow("Image", image_mini)
-        key = cv2.waitKey(0)
+        while True:
+            cv2.imshow("Image", image_mini)
+            key = cv2.waitKey(0)
 
-        if key == ord("q"):
-            break
+            if key == ord("q"):
+                break
 
-        if key == ord("a") and frame_start and frame_end:
-            dark_spots = on_key(key)
-            if dark_spots:
-                for dark_spot in dark_spots:
-                    temp_image = image_mini.copy()
-                    (x, y, w, h, dimensions) = dark_spot
-                    cv2.rectangle(temp_image, (x + frame_start[0], y + frame_start[1]), (x + frame_start[0] + w, y + frame_start[1] + h), (0, 0, 255), 2)
+            if key == ord("a") and frame_start and frame_end:
+                dark_spots = on_key(key)
+                if dark_spots:
+                    for dark_spot in dark_spots:
+                        temp_image = image_mini.copy()
+                        (x, y, w, h, dimensions) = dark_spot
+                        cv2.rectangle(temp_image, (x + frame_start[0], y + frame_start[1]), (x + frame_start[0] + w, y + frame_start[1] + h), (0, 0, 255), 2)
 
-                    # Add dimensions text to the dark spot
-                    width_cm = w / (calculate_distance(point1, point2)/etalon_line)
-                    height_cm = h / (calculate_distance(point1, point2)/etalon_line)
-                    cv2.putText(temp_image, f"Square: {dimensions:.5f} cm^2", (x + frame_start[0], y + frame_start[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                    cv2.putText(temp_image, f"Width: {width_cm:.5f} cm", (x + frame_start[0], y + frame_start[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                    cv2.putText(temp_image, f"Height: {height_cm:.5f} cm", (x + frame_start[0], y + frame_start[1] + h + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                        # Add dimensions text to the dark spot
+                        width_cm = w / (calculate_distance(point1, point2)/etalon_line)
+                        height_cm = h / (calculate_distance(point1, point2)/etalon_line)
+                        cv2.putText(temp_image, f"Square: {dimensions:.5f} cm^2", (x + frame_start[0], y + frame_start[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                        cv2.putText(temp_image, f"Width: {width_cm:.5f} cm", (x + frame_start[0], y + frame_start[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                        cv2.putText(temp_image, f"Height: {height_cm:.5f} cm", (x + frame_start[0], y + frame_start[1] + h + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
-                    cv2.imshow("Image", temp_image)
-                    cv2.waitKey(0)
+                        cv2.imshow("Image", temp_image)
+                        cv2.waitKey(0)
 
 cv2.destroyAllWindows()
 
